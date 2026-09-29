@@ -64,6 +64,11 @@ export class InterpAiClient {
   private seenCaptionOrder: string[] = [];
   private seenAudio = new Set<number>();
   private seenAudioOrder: number[] = [];
+  private pendingAudioMeta = new Map<number, WireEvent>();
+  private pendingOpus = new Set<number>();
+  private opusPrimer: Uint8Array[] = [];
+  private opusFailures = 0;
+  private opusDisabled = false;
   private pcmChain: Promise<void> = Promise.resolve();
 
   constructor(options: InterpAiClientOptions) {
@@ -158,6 +163,11 @@ export class InterpAiClient {
     this.seenCaptionOrder = [];
     this.seenAudio.clear();
     this.seenAudioOrder = [];
+    this.pendingAudioMeta.clear();
+    this.pendingOpus.clear();
+    this.opusPrimer = [];
+    this.opusFailures = 0;
+    this.opusDisabled = false;
     this.webrtcHealthy = false;
     this.retryAttempt = 0;
     this.emitTransport({ audio: 'none', captions: 'off' });
@@ -172,6 +182,7 @@ export class InterpAiClient {
       acceptAudio: true,
       onEvents: (events, transport) => this.applyEvents(events, transport, true),
       onPcm: (header, pcm, transport) => this.applySocketPcm(header, pcm, transport),
+      onOpus: (header, packets, transport) => this.applySocketOpus(header, packets, transport),
       onTransport: transport => {
         if (captionLanguage === language) this.emitTransport({ captions: transport });
       },
@@ -187,6 +198,7 @@ export class InterpAiClient {
         acceptAudio: false,
         onEvents: (events, transport) => this.applyEvents(events, transport, false),
         onPcm: () => undefined,
+        onOpus: () => undefined,
         onTransport: transport => this.emitTransport({ captions: transport }),
       });
       this.captionEvents = captions;
@@ -244,13 +256,44 @@ export class InterpAiClient {
     this.pcmChain = this.pcmChain.then(() => this.pcm.enqueue(pcm, header.sample_rate)).catch(() => undefined);
   }
 
+  private applySocketOpus(
+    header: AudioHeader,
+    packets: Uint8Array[],
+    transport: 'websocket-opus' | 'sse-opus',
+  ): void {
+    if (this.opusDisabled || this.webrtcHealthy || this.muted || !this.claimAudio(header.sequence)) return;
+    const primer = this.opusPrimer;
+    this.opusPrimer = packets.slice(-2);
+    if (header.sequence > 0) this.pendingOpus.add(header.sequence);
+    this.emitTransport({ audio: transport });
+    this.emitState('fallback');
+    this.pcmChain = this.pcmChain.then(async () => {
+      await this.pcm.enqueueOpus(packets, primer);
+      this.opusFailures = 0;
+      this.pendingOpus.delete(header.sequence);
+      this.pendingAudioMeta.delete(header.sequence);
+    }).catch(() => {
+      this.pendingOpus.delete(header.sequence);
+      this.releaseAudio(header.sequence);
+      if (++this.opusFailures >= 3) this.opusDisabled = true;
+      const fallback = this.pendingAudioMeta.get(header.sequence);
+      this.pendingAudioMeta.delete(header.sequence);
+      if (fallback) void this.fetchPcmFallback(fallback);
+    });
+  }
+
   private async fetchPcmFallback(event: WireEvent): Promise<void> {
     if (this.webrtcHealthy || this.muted) return;
     const payload = event.payload ?? {};
     const meta = (payload.audio_meta ?? payload) as Record<string, unknown>;
     const sequence = Number(event.sequence ?? payload.sequence ?? meta.sequence ?? 0);
     const path = String(meta.url ?? '');
-    if (!this.claimAudio(sequence) || !this.safeAudioPath(path)) return;
+    if (!this.safeAudioPath(path)) return;
+    if (sequence > 0 && this.seenAudio.has(sequence)) {
+      if (this.pendingOpus.has(sequence)) this.pendingAudioMeta.set(sequence, event);
+      return;
+    }
+    if (!this.claimAudio(sequence)) return;
     const generation = this.generation;
     const fetching = fetch(`${this.apiBaseUrl}${path}`, { headers: { Accept: 'application/octet-stream' } })
       .then(response => {

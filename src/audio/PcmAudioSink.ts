@@ -1,8 +1,10 @@
 import {
   AudioBufferQueueSourceNode,
   AudioContext,
+  decodeAudioData,
   GainNode,
 } from 'react-native-audio-api';
+import { buildOpusOggSegment } from './OpusOgg';
 
 /** Native, gap-resistant PCM playback for the restricted-network HTTPS fallback. */
 export class PcmAudioSink {
@@ -24,6 +26,33 @@ export class PcmAudioSink {
     const channel = buffer.getChannelData(0);
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     for (let i = 0; i < samples; i++) channel[i] = view.getInt16(i * 2, true) / 32768;
+    this.source.enqueueBuffer(buffer);
+  }
+
+  async enqueueOpus(
+    packets: readonly Uint8Array[],
+    primer: readonly Uint8Array[],
+  ): Promise<void> {
+    const segment = buildOpusOggSegment(packets, primer);
+    const input = segment.bytes.buffer.slice(
+      segment.bytes.byteOffset,
+      segment.bytes.byteOffset + segment.bytes.byteLength,
+    ) as ArrayBuffer;
+    const decoded = await decodeAudioData(input, 48_000);
+    if (decoded.numberOfChannels < 1 || decoded.length < segment.currentSamples) {
+      throw new Error('Native Opus decoder returned an incomplete segment.');
+    }
+    // Any decoder pre-skip and all primer output are at the head. The current segment is the tail.
+    const channel = decoded.getChannelData(0);
+    await this.enqueueFloat32(channel.subarray(channel.length - segment.currentSamples), 48_000);
+  }
+
+  private async enqueueFloat32(samples: Float32Array, sampleRate: number): Promise<void> {
+    if (!samples.length || samples.length > sampleRate * 5) return;
+    await this.ensureStarted();
+    if (!this.context || !this.source) return;
+    const buffer = this.context.createBuffer(1, samples.length, sampleRate);
+    buffer.getChannelData(0).set(samples);
     this.source.enqueueBuffer(buffer);
   }
 

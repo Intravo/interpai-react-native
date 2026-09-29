@@ -9,23 +9,25 @@ behavior used by Intravo's hosted listener.
 - meeting validation and the exact languages available for that meeting;
 - receive-only WebRTC audio with server-issued STUN and TURN credentials;
 - TURN/TCP/TLS support on port 443 when supplied by the Intravo server;
-- WebSocket backup transport, then SSE, then the durable HTTPS event poll;
+- low-bandwidth Opus backup audio over WebSocket or SSE, decoded natively on iOS and Android;
+- durable HTTPS PCM when WebSocket, SSE, or Opus decoding is unavailable;
 - native HTTPS PCM playback when WebRTC is unavailable on a restricted network;
 - captions with cross-transport cursor handoff and final-caption deduplication;
 - independent audio and caption languages;
 - bounded retry, language switching, mute, volume, and explicit server cleanup;
 - no microphone capture, camera capture, or `RTCView`.
 
-The socket normally carries compact Opus audio. React Native builds that do not install an optional
-Opus decoder leave those frames unclaimed and immediately use the matching HTTPS PCM segment. This
-preserves audio on restricted networks without giving an app microphone permissions.
+The socket normally carries compact Opus audio. The SDK wraps the server's packet stream in-memory
+for the native Opus decoder already included by `react-native-audio-api`; no optional decoder or
+microphone permission is required. Three consecutive decoder failures park Opus for that session
+and move the listener to the matching HTTPS PCM segments.
 
 ## Install from GitHub
 
 Until the first npm release is published:
 
 ```bash
-npm install github:Intravo/interpai-react-native#v0.1.0 \
+npm install github:Intravo/interpai-react-native#v0.2.0 \
   react-native-webrtc@^124.0.8 \
   react-native-audio-api@^0.13.6
 cd ios && pod install && cd ..
@@ -104,7 +106,9 @@ Audio and captions recover independently:
 
 ```text
 Audio:    WebRTC (direct or TURN/TCP/TLS 443)
-            -> socket PCM when available
+            -> WebSocket Opus
+            -> SSE Opus
+            -> socket PCM compatibility frames
             -> HTTPS PCM segments
 
 Captions: WebSocket

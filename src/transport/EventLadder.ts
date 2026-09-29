@@ -1,6 +1,7 @@
 import { toByteArray } from 'base64-js';
 import { ungzip } from 'pako';
 import EventSource, { EventSourceEvent } from 'react-native-sse';
+import { parseOpusPackets } from '../audio/OpusOgg';
 
 export type WireEvent = {
   id?: number;
@@ -35,6 +36,11 @@ type Options = {
   acceptAudio: boolean;
   onEvents: (events: WireEvent[], transport: EventTransport) => void;
   onPcm: (header: AudioHeader, pcm: Uint8Array, transport: 'websocket-pcm' | 'sse-pcm') => void;
+  onOpus: (
+    header: AudioHeader,
+    packets: Uint8Array[],
+    transport: 'websocket-opus' | 'sse-opus',
+  ) => void;
   onTransport: (transport: EventTransport) => void;
 };
 
@@ -48,6 +54,7 @@ export class EventLadder {
   private readonly acceptAudio: boolean;
   private readonly onEvents: Options['onEvents'];
   private readonly onPcm: Options['onPcm'];
+  private readonly onOpus: Options['onOpus'];
   private readonly onTransport: Options['onTransport'];
   private stopped = true;
   private generation = 0;
@@ -67,6 +74,7 @@ export class EventLadder {
     this.acceptAudio = options.acceptAudio;
     this.onEvents = options.onEvents;
     this.onPcm = options.onPcm;
+    this.onOpus = options.onOpus;
     this.onTransport = options.onTransport;
   }
 
@@ -247,28 +255,33 @@ export class EventLadder {
     if (size < 2 || size > 2_048 || bytes.byteLength <= 2 + size) return;
     let header: AudioHeader;
     try { header = JSON.parse(new TextDecoder().decode(bytes.subarray(2, 2 + size))); } catch { return; }
-    await this.deliverPcm(header, bytes.subarray(2 + size), 'websocket-pcm');
+    await this.deliverAudio(header, bytes.subarray(2 + size), 'websocket');
   }
 
   private async handleSseAudio(header: AudioHeader): Promise<void> {
     if (typeof header.data !== 'string') return;
     let payload: Uint8Array;
     try { payload = toByteArray(header.data); } catch { return; }
-    await this.deliverPcm(header, payload, 'sse-pcm');
+    await this.deliverAudio(header, payload, 'sse');
   }
 
-  private async deliverPcm(
+  private async deliverAudio(
     header: AudioHeader,
     payload: Uint8Array,
-    transport: 'websocket-pcm' | 'sse-pcm',
+    transport: 'websocket' | 'sse',
   ): Promise<void> {
     if (header.t !== 'audio' || header.language !== this.language || header.channels !== 1) return;
-    // Opus is deliberately left unclaimed: its matching audio_meta event immediately selects the
-    // universally decodable HTTPS PCM rung. PCM compatibility frames are played directly.
+    if (header.format === 'opus') {
+      if (header.encoding !== 'none' || header.sample_rate !== 48_000) return;
+      try {
+        this.onOpus(header, parseOpusPackets(payload), `${transport}-opus`);
+      } catch { /* malformed frames remain unclaimed for the HTTPS PCM floor */ }
+      return;
+    }
     if (header.format !== 'pcm_s16le') return;
     if (header.encoding !== 'gzip' && header.encoding !== 'none') return;
     const pcm = header.encoding === 'gzip' ? ungzip(payload) : payload;
-    this.onPcm(header, pcm, transport);
+    this.onPcm(header, pcm, `${transport}-pcm`);
   }
 
   private schedulePoll(delay: number, generation: number): void {

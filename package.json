@@ -1,6 +1,6 @@
 {
   "name": "@intravo/interpai-react-native",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "React Native SDK for Intravo live interpretation audio and captions",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,6 +11,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify:opus": "node --no-warnings --experimental-strip-types scripts/verify-opus.mjs",
     "prepack": "npm run build"
   },
   "keywords": [

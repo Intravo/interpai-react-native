@@ -26,6 +26,8 @@ export type InterpAiState = 'closed' | 'connecting' | 'live' | 'fallback' | 'una
 
 export type InterpAiAudioTransport =
   | 'webrtc'
+  | 'websocket-opus'
+  | 'sse-opus'
   | 'websocket-pcm'
   | 'sse-pcm'
   | 'https-pcm'
