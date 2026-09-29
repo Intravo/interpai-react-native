@@ -1,0 +1,51 @@
+{
+  "name": "@intravo/interpai-react-native",
+  "version": "0.1.0",
+  "description": "React Native SDK for Intravo live interpretation audio and captions",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "intravo",
+    "interpretation",
+    "react-native",
+    "captions",
+    "webrtc"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Intravo/interpai-react-native.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "react": ">=18",
+    "react-native": ">=0.76",
+    "react-native-audio-api": ">=0.13.6",
+    "react-native-webrtc": ">=124.0.8"
+  },
+  "dependencies": {
+    "base64-js": "^1.5.1",
+    "pako": "^2.1.0",
+    "react-native-sse": "^1.2.1"
+  },
+  "devDependencies": {
+    "@types/pako": "^2.0.4",
+    "@types/react": "^19.1.16",
+    "react": "^19.1.1",
+    "react-native": "^0.87.1",
+    "react-native-audio-api": "^0.13.6",
+    "react-native-webrtc": "^124.0.8",
+    "typescript": "^5.9.3"
+  }
+}
