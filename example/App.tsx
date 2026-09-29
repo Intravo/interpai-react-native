@@ -42,6 +42,8 @@ export default function App() {
           accessCode={code}
           language={selected.code}
           showCaptions={true}
+          playInBackground={true}
+          showCaptionsOnLockScreen={true}
           style={styles.captions}
         />
       )}

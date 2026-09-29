@@ -14,6 +14,7 @@ behavior used by Intravo's hosted listener.
 - native HTTPS PCM playback when WebRTC is unavailable on a restricted network;
 - captions with cross-transport cursor handoff and final-caption deduplication;
 - independent audio and caption languages;
+- opt-in background/locked playback and lock-screen captions;
 - bounded retry, language switching, mute, volume, and explicit server cleanup;
 - no microphone capture, camera capture, or `RTCView`.
 
@@ -27,7 +28,7 @@ and move the listener to the matching HTTPS PCM segments.
 Until the first npm release is published:
 
 ```bash
-npm install github:Intravo/interpai-react-native#v0.2.0 \
+npm install github:Intravo/interpai-react-native#v0.3.0 \
   react-native-webrtc@^124.0.8 \
   react-native-audio-api@^0.13.6
 cd ios && pod install && cd ..
@@ -48,6 +49,8 @@ export function MeetingAudio() {
       accessCode="MRK-4820"
       language="es"
       showCaptions={true}
+      playInBackground={true}
+      showCaptionsOnLockScreen={true}
       onTransportChange={({ audio, captions }) => {
         console.log({ audio, captions });
       }}
@@ -60,6 +63,50 @@ export function MeetingAudio() {
 handoffs. Setting it to `false` hides and suppresses caption callbacks; it does not disable the event
 transport because that same transport discovers restricted-network audio segments.
 
+`playInBackground={true}` keeps interpretation audio active while the app is backgrounded or the
+phone is locked. `showCaptionsOnLockScreen={true}` publishes partial and final captions through iOS
+Now Playing and Android's media notification; it implicitly keeps the background media session
+active. Both background options default to `false` because captions may contain sensitive content.
+
+## Enable background playback in the host app
+
+Background execution is a build-time capability. For Expo prebuild/development builds, enable the
+SDK's included config plugin:
+
+```json
+{
+  "expo": {
+    "plugins": ["@intravo/interpai-react-native"]
+  }
+}
+```
+
+The plugin adds iOS's `audio` background mode and Android's media-playback foreground service with
+`FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_MEDIA_PLAYBACK`. It never adds microphone permission.
+
+For a bare React Native app, make the equivalent native changes:
+
+```xml
+<!-- ios/YourApp/Info.plist -->
+<key>UIBackgroundModes</key>
+<array><string>audio</string></array>
+```
+
+```xml
+<!-- android/app/src/main/AndroidManifest.xml -->
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+<application ...>
+  <service
+    android:name="com.swmansion.audioapi.system.CentralizedForegroundService"
+    android:foregroundServiceType="mediaPlayback"
+    android:stopWithTask="true" />
+</application>
+```
+
+Rebuild the native app after changing either configuration. A JavaScript reload is not enough.
+
 ## Hook for a custom interface
 
 ```tsx
@@ -68,17 +115,19 @@ import { useInterpAi } from '@intravo/interpai-react-native';
 const player = useInterpAi({
   apiBaseUrl: 'https://YOUR_INTRAVO_HOST',
   showCaptions: true,
+  playInBackground: true,
+  showCaptionsOnLockScreen: true,
 });
 
-const meeting = await player.getMeeting(accessCode);
-// meeting.languages is the authoritative list for this meeting.
+const languages = await player.getAvailableLanguages(accessCode);
+// This is the authoritative list for this meeting.
 
-await player.connect(accessCode, meeting.languages[0].code);
+await player.connect(accessCode, languages[0].code);
 ```
 
-The hook exposes `languages`, `captions`, `state`, `transport`, `setMuted`, `setVolume`, `wake`, and
-`disconnect`. Call `wake()` when the app receives a network-recovery signal or returns to the
-foreground.
+The hook exposes `getMeeting`, `getAvailableLanguages`, `languages`, `captions`, `state`,
+`transport`, `setMuted`, `setVolume`, `wake`, and `disconnect`. Call `wake()` when the app receives
+a network-recovery signal or returns to the foreground.
 
 ## Headless client
 
@@ -88,15 +137,17 @@ import { InterpAiClient } from '@intravo/interpai-react-native';
 const client = new InterpAiClient({
   apiBaseUrl: 'https://YOUR_INTRAVO_HOST',
   showCaptions: true,
+  playInBackground: true,
+  showCaptionsOnLockScreen: true,
   onCaption: caption => renderCaption(caption),
   onTransportChange: transport => updateDiagnostics(transport),
 });
 
-const meeting = await client.getMeeting(accessCode);
+const languages = await client.getAvailableLanguages(accessCode);
 await client.connect({
   accessCode,
-  language: meeting.languages[0].code,
-  captionLanguage: meeting.languages[0].code,
+  language: languages[0].code,
+  captionLanguage: languages[0].code,
 });
 ```
 

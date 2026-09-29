@@ -44,6 +44,10 @@ export type InterpAiClientOptions = {
   apiBaseUrl: string;
   /** Emits caption callbacks and allows the managed component to render them. Default: true. */
   showCaptions?: boolean;
+  /** Keeps interpretation audio active while the app is backgrounded or the phone is locked. */
+  playInBackground?: boolean;
+  /** Publishes captions to iOS Now Playing and Android's media notification. Default: false. */
+  showCaptionsOnLockScreen?: boolean;
   connectTimeoutMs?: number;
   onStateChange?: (state: InterpAiState) => void;
   onTransportChange?: (transport: InterpAiTransportState) => void;

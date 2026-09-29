@@ -14,6 +14,11 @@ export class PcmAudioSink {
   private volume = 1;
   private muted = false;
 
+  /** Keep a native playback session active for iOS Now Playing metadata. */
+  async activate(): Promise<void> {
+    await this.ensureStarted();
+  }
+
   async enqueue(raw: ArrayBuffer | Uint8Array, sampleRate: number): Promise<void> {
     const bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
     if (bytes.byteLength < 2 || (bytes.byteLength & 1) !== 0) return;

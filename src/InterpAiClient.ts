@@ -4,12 +4,14 @@ import {
   RTCSessionDescription,
 } from 'react-native-webrtc';
 import { PcmAudioSink } from './audio/PcmAudioSink';
+import { LockScreenCaptions } from './LockScreenCaptions';
 import { AudioHeader, EventLadder, EventTransport, WireEvent } from './transport/EventLadder';
 import type {
   InterpAiCaption,
   InterpAiCaptionTransport,
   InterpAiClientOptions,
   InterpAiConnectOptions,
+  InterpAiLanguage,
   InterpAiMeeting,
   InterpAiState,
   InterpAiTransportState,
@@ -43,6 +45,7 @@ export class InterpAiClient {
   private readonly connectTimeoutMs: number;
   private readonly callbacks: InterpAiClientOptions;
   private readonly pcm = new PcmAudioSink();
+  private readonly lockScreen: LockScreenCaptions;
   private showCaptions: boolean;
   private state: InterpAiState = 'closed';
   private transport: InterpAiTransportState = { audio: 'none', captions: 'off' };
@@ -76,6 +79,11 @@ export class InterpAiClient {
     this.connectTimeoutMs = options.connectTimeoutMs ?? 15_000;
     this.showCaptions = options.showCaptions ?? true;
     this.callbacks = options;
+    this.lockScreen = new LockScreenCaptions(
+      options.playInBackground ?? false,
+      options.showCaptionsOnLockScreen ?? false,
+      () => this.pcm.activate(),
+    );
   }
 
   async getMeeting(rawAccessCode: string): Promise<InterpAiMeeting> {
@@ -85,6 +93,11 @@ export class InterpAiClient {
     });
     this.callbacks.onMeeting?.(meeting);
     return meeting;
+  }
+
+  /** Return only the language routes currently configured for this meeting. */
+  async getAvailableLanguages(rawAccessCode: string): Promise<InterpAiLanguage[]> {
+    return (await this.getMeeting(rawAccessCode)).languages;
   }
 
   async connect(options: InterpAiConnectOptions): Promise<InterpAiMeeting> {
@@ -104,6 +117,9 @@ export class InterpAiClient {
     this.accessCode = accessCode;
     this.language = language;
     this.captionLanguage = captionLanguage;
+    const captionLanguageName = meeting.languages.find(item => item.code === captionLanguage)?.name
+      ?? captionLanguage;
+    this.lockScreen.start(meeting.meeting_name, captionLanguageName);
     this.startEventLadders(accessCode, language, captionLanguage);
 
     try {
@@ -121,6 +137,14 @@ export class InterpAiClient {
 
   setShowCaptions(show: boolean): void {
     this.showCaptions = show;
+  }
+
+  setShowCaptionsOnLockScreen(show: boolean): void {
+    this.lockScreen.setShowCaptions(show);
+  }
+
+  setPlayInBackground(play: boolean): void {
+    this.lockScreen.setPlayInBackground(play);
   }
 
   setMuted(muted: boolean): void {
@@ -154,6 +178,7 @@ export class InterpAiClient {
     this.audioEvents = null;
     this.captionEvents = null;
     await this.closePeer();
+    await this.lockScreen.hide();
     this.pcm.clear();
     await this.pcm.close();
     this.accessCode = null;
@@ -227,7 +252,7 @@ export class InterpAiClient {
     const sequence = Number(event.sequence ?? payload.sequence ?? 0);
     const language = String(event.language ?? payload.language ?? '');
     const text = String(payload.translation ?? payload.text ?? payload.source ?? '').trim();
-    if (!text || !this.showCaptions) return;
+    if (!text) return;
     if (!partial && sequence > 0) {
       const key = `${language}:${sequence}`;
       if (this.seenCaptions.has(key)) return;
@@ -242,7 +267,8 @@ export class InterpAiClient {
       sequence,
       partial,
     };
-    this.callbacks.onCaption?.(caption);
+    this.lockScreen.update(caption);
+    if (this.showCaptions) this.callbacks.onCaption?.(caption);
   }
 
   private applySocketPcm(

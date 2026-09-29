@@ -10,6 +10,8 @@ export type InterpAiPlayerProps = {
   captionLanguage?: string;
   autoConnect?: boolean;
   showCaptions?: boolean;
+  playInBackground?: boolean;
+  showCaptionsOnLockScreen?: boolean;
   maxCaptionRows?: number;
   style?: StyleProp<ViewStyle>;
   captionStyle?: StyleProp<TextStyle>;
@@ -29,6 +31,8 @@ export function InterpAiPlayer({
   captionLanguage,
   autoConnect = true,
   showCaptions = true,
+  playInBackground = false,
+  showCaptionsOnLockScreen = false,
   maxCaptionRows = 8,
   style,
   captionStyle,
@@ -36,7 +40,13 @@ export function InterpAiPlayer({
   onStateChange,
   onTransportChange,
 }: InterpAiPlayerProps) {
-  const player = useInterpAi({ apiBaseUrl, showCaptions, maxCaptionRows });
+  const player = useInterpAi({
+    apiBaseUrl,
+    showCaptions,
+    playInBackground,
+    showCaptionsOnLockScreen,
+    maxCaptionRows,
+  });
 
   useEffect(() => {
     if (!autoConnect) return;

@@ -10,6 +10,8 @@ import type {
 export type UseInterpAiOptions = {
   apiBaseUrl: string;
   showCaptions?: boolean;
+  playInBackground?: boolean;
+  showCaptionsOnLockScreen?: boolean;
   maxCaptionRows?: number;
 };
 
@@ -25,6 +27,8 @@ export function useInterpAi(options: UseInterpAiOptions) {
   const client = useMemo(() => new InterpAiClient({
     apiBaseUrl: options.apiBaseUrl,
     showCaptions: options.showCaptions,
+    playInBackground: options.playInBackground,
+    showCaptionsOnLockScreen: options.showCaptionsOnLockScreen,
     onStateChange: setState,
     onTransportChange: setTransport,
     onMeeting: setMeeting,
@@ -50,6 +54,14 @@ export function useInterpAi(options: UseInterpAiOptions) {
     client.setShowCaptions(options.showCaptions ?? true);
   }, [client, options.showCaptions]);
 
+  useEffect(() => {
+    client.setShowCaptionsOnLockScreen(options.showCaptionsOnLockScreen ?? false);
+  }, [client, options.showCaptionsOnLockScreen]);
+
+  useEffect(() => {
+    client.setPlayInBackground(options.playInBackground ?? false);
+  }, [client, options.playInBackground]);
+
   useEffect(() => () => { void client.disconnect(); }, [client]);
 
   const getMeeting = useCallback(async (accessCode: string) => {
@@ -57,6 +69,11 @@ export function useInterpAi(options: UseInterpAiOptions) {
     setMeeting(found);
     return found;
   }, [client]);
+
+  const getAvailableLanguages = useCallback(
+    (accessCode: string) => client.getAvailableLanguages(accessCode),
+    [client],
+  );
 
   const connect = useCallback(async (
     accessCode: string,
@@ -80,6 +97,7 @@ export function useInterpAi(options: UseInterpAiOptions) {
     languages: meeting?.languages ?? [],
     captions,
     getMeeting,
+    getAvailableLanguages,
     connect,
     disconnect,
     setMuted: (muted: boolean) => client.setMuted(muted),
