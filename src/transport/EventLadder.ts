@@ -3,6 +3,14 @@ import { ungzip } from 'pako';
 import EventSource, { EventSourceEvent } from 'react-native-sse';
 import { parseOpusPackets } from '../audio/OpusOgg';
 
+export function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 export type WireEvent = {
   id?: number;
   oid?: number;
@@ -68,7 +76,7 @@ export class EventLadder {
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: Options) {
-    this.apiBaseUrl = options.apiBaseUrl.replace(/\/+$/, '');
+    this.apiBaseUrl = trimTrailingSlashes(options.apiBaseUrl);
     this.accessCode = options.accessCode;
     this.language = options.language;
     this.acceptAudio = options.acceptAudio;

@@ -5,7 +5,7 @@ import {
 } from 'react-native-webrtc';
 import { PcmAudioSink } from './audio/PcmAudioSink';
 import { LockScreenCaptions } from './LockScreenCaptions';
-import { AudioHeader, EventLadder, EventTransport, WireEvent } from './transport/EventLadder';
+import { AudioHeader, EventLadder, EventTransport, WireEvent, trimTrailingSlashes } from './transport/EventLadder';
 import type {
   InterpAiCaption,
   InterpAiCaptionTransport,
@@ -75,7 +75,7 @@ export class InterpAiClient {
   private pcmChain: Promise<void> = Promise.resolve();
 
   constructor(options: InterpAiClientOptions) {
-    this.apiBaseUrl = options.apiBaseUrl.replace(/\/+$/, '');
+    this.apiBaseUrl = trimTrailingSlashes(options.apiBaseUrl);
     this.connectTimeoutMs = options.connectTimeoutMs ?? 15_000;
     this.showCaptions = options.showCaptions ?? true;
     this.callbacks = options;
