@@ -12,6 +12,7 @@ export type UseInterpAiOptions = {
   showCaptions?: boolean;
   playInBackground?: boolean;
   showCaptionsOnLockScreen?: boolean;
+  lockScreenControls?: boolean;
   maxCaptionRows?: number;
 };
 
@@ -20,6 +21,7 @@ export function useInterpAi(options: UseInterpAiOptions) {
   const [transport, setTransport] = useState<InterpAiTransportState>({ audio: 'none', captions: 'off' });
   const [meeting, setMeeting] = useState<InterpAiMeeting | null>(null);
   const [captions, setCaptions] = useState<InterpAiCaption[]>([]);
+  const [paused, setPaused] = useState(false);
   const maxRows = options.maxCaptionRows ?? 50;
   const maxRowsRef = useRef(maxRows);
   maxRowsRef.current = maxRows;
@@ -29,7 +31,9 @@ export function useInterpAi(options: UseInterpAiOptions) {
     showCaptions: options.showCaptions,
     playInBackground: options.playInBackground,
     showCaptionsOnLockScreen: options.showCaptionsOnLockScreen,
+    lockScreenControls: options.lockScreenControls,
     onStateChange: setState,
+    onPausedChange: setPaused,
     onTransportChange: setTransport,
     onMeeting: setMeeting,
     onCaption: caption => {
@@ -61,6 +65,10 @@ export function useInterpAi(options: UseInterpAiOptions) {
   useEffect(() => {
     client.setPlayInBackground(options.playInBackground ?? false);
   }, [client, options.playInBackground]);
+
+  useEffect(() => {
+    client.setLockScreenControls(options.lockScreenControls ?? false);
+  }, [client, options.lockScreenControls]);
 
   useEffect(() => () => { void client.disconnect(); }, [client]);
 
@@ -96,11 +104,14 @@ export function useInterpAi(options: UseInterpAiOptions) {
     meeting,
     languages: meeting?.languages ?? [],
     captions,
+    paused,
     getMeeting,
     getAvailableLanguages,
     connect,
     disconnect,
     setMuted: (muted: boolean) => client.setMuted(muted),
+    pause: () => client.pause(),
+    resume: () => client.resume(),
     setVolume: (volume: number) => client.setVolume(volume),
     wake: () => client.wake(),
   };

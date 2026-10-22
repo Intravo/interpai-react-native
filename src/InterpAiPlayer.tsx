@@ -12,6 +12,7 @@ export type InterpAiPlayerProps = {
   showCaptions?: boolean;
   playInBackground?: boolean;
   showCaptionsOnLockScreen?: boolean;
+  lockScreenControls?: boolean;
   maxCaptionRows?: number;
   style?: StyleProp<ViewStyle>;
   captionStyle?: StyleProp<TextStyle>;
@@ -33,6 +34,7 @@ export function InterpAiPlayer({
   showCaptions = true,
   playInBackground = false,
   showCaptionsOnLockScreen = false,
+  lockScreenControls = false,
   maxCaptionRows = 8,
   style,
   captionStyle,
@@ -45,6 +47,7 @@ export function InterpAiPlayer({
     showCaptions,
     playInBackground,
     showCaptionsOnLockScreen,
+    lockScreenControls,
     maxCaptionRows,
   });
 

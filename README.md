@@ -64,7 +64,11 @@ handoffs. Setting it to `false` hides and suppresses caption callbacks; it does 
 transport because that same transport discovers restricted-network audio segments.
 
 `playInBackground={true}` keeps interpretation audio active while the app is backgrounded or the
-phone is locked. `showCaptionsOnLockScreen={true}` publishes partial and final captions through iOS
+phone is locked. `lockScreenControls={true}` adds play/pause to that lock-screen card and Android
+notification. Pausing silences the stream but keeps the connection, so resuming is instant and
+picks up at the live point; nothing is buffered while paused. The hook exposes `paused`, `pause()`
+and `resume()`, and the client reports every change through `onPausedChange`, including a pause
+made from the lock screen. `showCaptionsOnLockScreen={true}` publishes partial and final captions through iOS
 Now Playing and Android's media notification; it implicitly keeps the background media session
 active. Both background options default to `false` because captions may contain sensitive content.
 
@@ -126,7 +130,7 @@ await player.connect(accessCode, languages[0].code);
 ```
 
 The hook exposes `getMeeting`, `getAvailableLanguages`, `languages`, `captions`, `state`,
-`transport`, `setMuted`, `setVolume`, `wake`, and `disconnect`. Call `wake()` when the app receives
+`transport`, `paused`, `pause`, `resume`, `setMuted`, `setVolume`, `wake`, and `disconnect`. Call `wake()` when the app receives
 a network-recovery signal or returns to the foreground.
 
 ## Headless client

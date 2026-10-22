@@ -62,6 +62,7 @@ export class InterpAiClient {
   private retryAttempt = 0;
   private volume = 1;
   private muted = false;
+  private paused = false;
   private webrtcHealthy = false;
   private seenCaptions = new Set<string>();
   private seenCaptionOrder: string[] = [];
@@ -83,6 +84,8 @@ export class InterpAiClient {
       options.playInBackground ?? false,
       options.showCaptionsOnLockScreen ?? false,
       () => this.pcm.activate(),
+      options.lockScreenControls ?? false,
+      action => (action === 'pause' ? this.pause() : this.resume()),
     );
   }
 
@@ -147,9 +150,48 @@ export class InterpAiClient {
     this.lockScreen.setPlayInBackground(play);
   }
 
+  /** Shows play/pause on the lock screen and in Android's media notification. */
+  setLockScreenControls(enabled: boolean): void {
+    this.lockScreen.setControls(enabled);
+  }
+
   setMuted(muted: boolean): void {
     this.muted = muted;
-    this.pcm.setMuted(muted);
+    this.applySilence();
+  }
+
+  /**
+   * Silences the stream while keeping the connection, so resume() is instant. Live audio
+   * resumes at the live point; nothing is buffered while paused. No-op when not connected.
+   */
+  pause(): void {
+    if (!this.accessCode || this.paused) return;
+    this.setPaused(true);
+  }
+
+  resume(): void {
+    if (!this.paused) return;
+    this.setPaused(false);
+  }
+
+  isPaused(): boolean {
+    return this.paused;
+  }
+
+  private setPaused(paused: boolean): void {
+    this.paused = paused;
+    this.applySilence();
+    this.lockScreen.setPaused(paused);
+    this.callbacks.onPausedChange?.(paused);
+  }
+
+  /** Muted by the app or paused by the listener: either way no audio is played or fetched. */
+  private get silenced(): boolean {
+    return this.muted || this.paused;
+  }
+
+  private applySilence(): void {
+    this.pcm.setMuted(this.silenced);
     this.applyRemoteVolume();
   }
 
@@ -195,6 +237,7 @@ export class InterpAiClient {
     this.opusDisabled = false;
     this.webrtcHealthy = false;
     this.retryAttempt = 0;
+    if (this.paused) this.setPaused(false);
     this.emitTransport({ audio: 'none', captions: 'off' });
     this.emitState('closed');
   }
@@ -276,7 +319,7 @@ export class InterpAiClient {
     pcm: Uint8Array,
     transport: 'websocket-pcm' | 'sse-pcm',
   ): void {
-    if (this.webrtcHealthy || this.muted || !this.claimAudio(header.sequence)) return;
+    if (this.webrtcHealthy || this.silenced || !this.claimAudio(header.sequence)) return;
     this.emitTransport({ audio: transport });
     this.emitState('fallback');
     this.pcmChain = this.pcmChain.then(() => this.pcm.enqueue(pcm, header.sample_rate)).catch(() => undefined);
@@ -287,7 +330,7 @@ export class InterpAiClient {
     packets: Uint8Array[],
     transport: 'websocket-opus' | 'sse-opus',
   ): void {
-    if (this.opusDisabled || this.webrtcHealthy || this.muted || !this.claimAudio(header.sequence)) return;
+    if (this.opusDisabled || this.webrtcHealthy || this.silenced || !this.claimAudio(header.sequence)) return;
     const primer = this.opusPrimer;
     this.opusPrimer = packets.slice(-2);
     if (header.sequence > 0) this.pendingOpus.add(header.sequence);
@@ -309,7 +352,7 @@ export class InterpAiClient {
   }
 
   private async fetchPcmFallback(event: WireEvent): Promise<void> {
-    if (this.webrtcHealthy || this.muted) return;
+    if (this.webrtcHealthy || this.silenced) return;
     const payload = event.payload ?? {};
     const meta = (payload.audio_meta ?? payload) as Record<string, unknown>;
     const sequence = Number(event.sequence ?? payload.sequence ?? meta.sequence ?? 0);
@@ -329,7 +372,7 @@ export class InterpAiClient {
     fetching.catch(() => undefined);
     this.pcmChain = this.pcmChain.then(async () => {
       const bytes = await fetching;
-      if (generation !== this.generation || this.webrtcHealthy || this.muted) return;
+      if (generation !== this.generation || this.webrtcHealthy || this.silenced) return;
       this.emitTransport({ audio: 'https-pcm' });
       this.emitState('fallback');
       await this.pcm.enqueue(bytes, Number(meta.sample_rate ?? 24_000));
@@ -477,8 +520,8 @@ export class InterpAiClient {
   private applyRemoteVolume(): void {
     const track = this.remoteTrack as (MediaStreamTrack & { _setVolume?: (value: number) => void }) | null;
     if (!track) return;
-    if (typeof track._setVolume === 'function') track._setVolume(this.muted ? 0 : this.volume);
-    else track.enabled = !this.muted && this.volume > 0;
+    if (typeof track._setVolume === 'function') track._setVolume(this.silenced ? 0 : this.volume);
+    else track.enabled = !this.silenced && this.volume > 0;
   }
 
   private claimAudio(sequence: number): boolean {

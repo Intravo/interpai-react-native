@@ -1,6 +1,8 @@
 import { PlaybackNotificationManager } from 'react-native-audio-api';
 import type { InterpAiCaption } from './types';
 
+export type LockScreenAction = 'play' | 'pause';
+
 const CONTROLS = [
   'play',
   'pause',
@@ -12,10 +14,17 @@ const CONTROLS = [
   'seekTo',
 ] as const;
 
-/** Publishes live captions through iOS Now Playing and Android's media notification. */
+/**
+ * Publishes live captions through iOS Now Playing and Android's media notification, and
+ * optionally play/pause there. Every other control stays off: seeking and skipping mean
+ * nothing on a live stream.
+ */
 export class LockScreenCaptions {
   private playInBackground: boolean;
   private showCaptions: boolean;
+  private controls: boolean;
+  private paused = false;
+  private listening = false;
   private meetingName = '';
   private languageName = '';
   private latestCaption = '';
@@ -28,9 +37,26 @@ export class LockScreenCaptions {
     playInBackground: boolean,
     showCaptions: boolean,
     private readonly activateAudio: () => Promise<void>,
+    controls = false,
+    private readonly onAction: (action: LockScreenAction) => void = () => undefined,
   ) {
     this.playInBackground = playInBackground;
     this.showCaptions = showCaptions;
+    this.controls = controls;
+  }
+
+  setControls(enabled: boolean): void {
+    if (enabled === this.controls) return;
+    this.controls = enabled;
+    this.controlsConfigured = false;
+    this.applySettings();
+  }
+
+  /** Reflects the listener's pause in the play/pause control and the playback state. */
+  setPaused(paused: boolean): void {
+    if (paused === this.paused) return;
+    this.paused = paused;
+    if (this.shouldRun() && this.meetingName) this.publish(this.displayTitle());
   }
 
   setPlayInBackground(enabled: boolean): void {
@@ -58,6 +84,7 @@ export class LockScreenCaptions {
     this.meetingName = meetingName.trim() || 'Intravo Interpretation';
     this.languageName = languageName.trim();
     this.latestCaption = '';
+    this.paused = false;
     ++this.generation;
     if (this.shouldRun()) this.publish(this.displayTitle());
   }
@@ -107,12 +134,33 @@ export class LockScreenCaptions {
       // same call to own its media-session notification and foreground playback service.
       await this.activateAudio();
       if (!this.controlsConfigured) {
-        await Promise.all(CONTROLS.map(control => PlaybackNotificationManager.enableControl(control, false)));
+        const enabled = this.controls;
+        await Promise.all(CONTROLS.map(control => PlaybackNotificationManager.enableControl(
+          control,
+          enabled && (control === 'play' || control === 'pause'),
+        )));
+        if (enabled) this.listen();
         this.controlsConfigured = true;
       }
       if (!this.shouldRun() || generation !== this.generation) return;
-      await PlaybackNotificationManager.show({ title, artist, album, state: 'playing' });
+      await PlaybackNotificationManager.show({
+        title,
+        artist,
+        album,
+        state: this.paused ? 'paused' : 'playing',
+      });
     }).catch(() => undefined);
+  }
+
+  /** Subscribed once for the client's lifetime; actions are ignored while nothing is shown. */
+  private listen(): void {
+    if (this.listening) return;
+    this.listening = true;
+    const forward = (action: LockScreenAction) => () => {
+      if (this.controls && this.meetingName) this.onAction(action);
+    };
+    PlaybackNotificationManager.addEventListener('playbackNotificationPlay', forward('play'));
+    PlaybackNotificationManager.addEventListener('playbackNotificationPause', forward('pause'));
   }
 
   private clearTimer(): void {
