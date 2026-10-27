@@ -96,6 +96,16 @@ export class PcmAudioSink {
     // Explicit offset: react-native-audio-api 0.13.6 defaults start()'s offset to -1 and then
     // rejects any negative offset, so a bare start() always throws and nothing ever plays.
     source.start(0, 0);
+    // Keep-alive: a silent oscillator keeps the engine rendering while the queue is empty (paused,
+    // or a network stall). Otherwise iOS treats a locked app as no longer playing and suspends it,
+    // which also stops the JS that fetches the next segment, so audio never comes back until the
+    // phone is unlocked. It lives and dies with the context.
+    const keepAlive = context.createOscillator();
+    const silence = context.createGain();
+    silence.gain.value = 0;
+    keepAlive.connect(silence);
+    silence.connect(context.destination);
+    keepAlive.start();
     this.context = context;
     this.source = source;
     this.gain = gain;

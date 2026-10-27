@@ -1,6 +1,6 @@
 {
   "name": "@intravo/interpai-react-native",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "React Native SDK for Intravo live interpretation audio and captions",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
