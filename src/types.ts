@@ -48,10 +48,18 @@ export type InterpAiClientOptions = {
   playInBackground?: boolean;
   /** Publishes captions to iOS Now Playing and Android's media notification. Default: false. */
   showCaptionsOnLockScreen?: boolean;
+  /**
+   * Shows play/pause on the lock screen and in Android's media notification while the
+   * background media session is active. Pausing silences the stream but keeps the connection,
+   * so resuming is instant. Default: false.
+   */
+  lockScreenControls?: boolean;
   connectTimeoutMs?: number;
   onStateChange?: (state: InterpAiState) => void;
   onTransportChange?: (transport: InterpAiTransportState) => void;
   onCaption?: (caption: InterpAiCaption) => void;
+  /** The listener paused or resumed: from the lock screen, pause()/resume(), or disconnect(). */
+  onPausedChange?: (paused: boolean) => void;
   onMeeting?: (meeting: InterpAiMeeting) => void;
   onRemoteTrack?: (track: MediaStreamTrack) => void;
 };
