@@ -93,7 +93,9 @@ export class PcmAudioSink {
     const gain = context.createGain();
     source.connect(gain);
     gain.connect(context.destination);
-    source.start();
+    // Explicit offset: react-native-audio-api 0.13.6 defaults start()'s offset to -1 and then
+    // rejects any negative offset, so a bare start() always throws and nothing ever plays.
+    source.start(0, 0);
     this.context = context;
     this.source = source;
     this.gain = gain;
